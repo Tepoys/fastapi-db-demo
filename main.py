@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import select, text
+from sqlalchemy.dialects.postgresql import CITEXT
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -16,13 +17,10 @@ class Base(DeclarativeBase):
 class Example(Base):
     __tablename__ = "example-table"
     id: Mapped[int] = mapped_column(primary_key=True)
-    username: Mapped[str] = mapped_column(nullable=False, unique=True)
+    username: Mapped[str] = mapped_column(CITEXT, nullable=False, unique=True)
 
 
 async def get_db():
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-
     db = SessionLocal()
     try:
         yield db
@@ -35,6 +33,13 @@ class ExampleBase(BaseModel):
 
 
 app = FastAPI()
+
+
+@app.on_event("startup")
+async def startup():
+    async with engine.begin() as conn:
+        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS citext"))
+        await conn.run_sync(Base.metadata.create_all)
 
 
 @app.post("/example")
